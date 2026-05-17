@@ -1,0 +1,38 @@
+[
+  {
+    "id": "cr-001",
+    "trigger_context": "config-change",
+    "trigger_keywords": ["config", "setting", "modify", "reconfigure"],
+    "must_also_fetch": ["backup-location", "rollback-instructions"],
+    "relationship_type": "constrains",
+    "confidence": 0.95,
+    "lifecycle": { "state": "promoted" }
+  },
+  {
+    "id": "cr-002",
+    "trigger_context": "error-debugging",
+    "trigger_keywords": ["error", "crash", "fail", "exception"],
+    "must_also_fetch": ["recent-incidents", "error-patterns"],
+    "relationship_type": "diagnosed_by",
+    "confidence": 0.90,
+    "lifecycle": { "state": "validated" }
+  },
+  {
+    "id": "cr-003",
+    "trigger_context": "database-ops",
+    "trigger_keywords": ["migrate", "migration", "schema", "drop table"],
+    "must_also_fetch": ["backup-verification", "rollback-runbook"],
+    "relationship_type": "constrains",
+    "confidence": 0.98,
+    "lifecycle": { "state": "testing" }
+  },
+  {
+    "id": "cr-004",
+    "trigger_context": "memory-optimization",
+    "trigger_keywords": ["memory", "ram", "usage", "leak", "oom", "check"],
+    "must_also_fetch": ["memory-history", "gc-logs"],
+    "relationship_type": "related_to",
+    "confidence": 0.85,
+    "lifecycle": { "state": "proposal" }
+  }
+]
