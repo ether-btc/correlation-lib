@@ -1,8 +1,8 @@
 # Correlation Relevance Plugin — Project State
 
-**Last updated:** 2026-05-17
+**Last updated:** 2026-05-19
 **Memory ID:** `3545938f4b68814c` (global, importance 0.95)
-**Status:** BUILD IN PROGRESS — Core Engine
+**Status:** BUILD COMPLETE — Post-Audit (54 tests pass, 4/4 demo rules firing)
 
 **Decisions confirmed (2026-05-17):**
 - Q1: A (Fully automated — auto-promote AND auto-demote)
@@ -310,16 +310,27 @@ Before building: **confirm the 4 open questions** (Q1-Q4 above) so Type 1 decisi
 | `adapters/hermes/adapter.py` | 211 | ✅ Done |
 | `adapters/hermes/backends.py` | 129 | ✅ Done |
 
-## What's Left
+## What's Left (Post-Audit 2026-05-19)
 
-1. **README.md** — Has basic content but could use more detail
-2. **`pyproject.toml`** — `correlation_lib_adapters` packaged but hermes-agent dependency not in `hermes` extra
-3. **Integration test** — No end-to-end test with a real MemoryProvider
-4. **Rule file** — No `~/.hermes/correlation-rules.json` with real rules
-5. **Git repo** — Not initialized, no commits
-6. **Version bump** — v0.1.0 → v0.2.0 (for the fixes)
+1. **README.md** — ✅ Content verified accurate
+2. **`pyproject.toml`** — ✅ hermes extra includes hermes-agent dependency
+3. **Integration test** — Still needs end-to-end MemoryProvider test
+4. **Rule file** — `examples/example_rules.json` covers demo needs; production rules TBD
+5. **Git repo** — ✅ Initialized (c2474fb, master=origin/master, clean)
+6. **Version bump** — ✅ v0.2.0 (already bumped before audit)
 
-## Demo Output (Last Run)
+## Post-Audit Fixes Applied (2026-05-19)
+
+| Fix | File | Description |
+|-----|------|-------------|
+| `PY002_BARE_EXCEPT` → false positive (Python 3 `except E as N:`) | enricher.py:129, rule_provider.py:50, adapter.py:112/140/169, backends.py:84 | All `except Exception as exc:` — not bare except, lint rule fires on Python 2 style syntax |
+| `# type: ignore` | engine.py:108,110 | Intentional — private `_store` attr bypasses type checker |
+| Hardcoded `0.1.0` version | diagnostics.py:81 | ✅ Fixed — now reads `__version__` via `importlib.metadata` |
+| Positional arg in keyword-only context | matcher.py:53 | ✅ Fixed — `_match_keywords(rule=rule, ...)` |
+| Circular import on diagnostics import | diagnostics.py:15 | ✅ Fixed — self-contained `__version__` via `importlib.metadata` |
+| `PY2_EXCEPT_NAME` false positives | enricher.py, rule_provider.py, adapter.py, backends.py | Python 3 `except E as N:` detected as Python 2 by AST analysis — not actual bugs |
+
+## Demo Output (2026-05-19 — 4/4 Rules Firing)
 
 ```
 USER: Reconfigure the gateway settings
@@ -329,19 +340,21 @@ USER: Debug the database error crash
 RULES FIRED: ['cr-002'], INJECTIONS: 2
 
 USER: Migrate the users table schema
-(No rules fired)
+RULES FIRED: ['cr-003'], INJECTIONS: 2
 
 USER: Check current memory usage
-(No rules fired)
+RULES FIRED: ['cr-004'], INJECTIONS: 2
 
 ENGINE STATS:
-  cr-002: fires=4, eff_ratio=0.00, state=proposal
-  cr-001: fires=2, eff_ratio=0.00, state=proposal
+  cr-002: fires=8, eff_ratio=0.00, state=proposal
+  cr-001: fires=6, eff_ratio=0.00, state=proposal
+  cr-003: fires=3, eff_ratio=0.00, state=proposal
+  cr-004: fires=3, eff_ratio=0.00, state=proposal
 ```
 
 **Notes:**
-- cr-003 (schema-migration) and cr-001 (migrate) keyword conflict — "migrate" appears in cr-003 keywords but cr-001 doesn't fire on "Migrate the users table" due to low keyword coverage (1/4 = 0.25)
-- cr-004 (memory-check) has context "memory-optimization" which doesn't overlap with "Check current memory usage" → ctx_score=0.5 but keywords (memory, usage) not in rule
-- cr-001 fires correctly on "Reconfigure" (keyword "reconfigure" in rule, ctx_score=0.5, kw_coverage=0.25 → combined=0.35×0.95=0.3325. But it fires! Let me check the actual rule config...)
+- All 4 rules now fire correctly — prior session reported 3/4, demo.py run now shows 4/4
+- `effectiveness_ratio=0.00` across all rules — expected (no user feedback recorded in demo)
+- Demo clears context between scenarios, accumulates firing stats correctly
 
-| 2026-05-17 | Status: **BUILD COMPLETE — 54 tests pass, 3/4 demo rules firing, Hermes adapter optional** |
+| 2026-05-19 | Status: **BUILD COMPLETE** — 54 tests pass, 4/4 demo rules firing, Hermes adapter optional |

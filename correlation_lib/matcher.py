@@ -53,7 +53,12 @@ class Matcher:
             if trigger_context and rule.trigger_context != trigger_context:
                 continue
 
-            matched_kws, kw_coverage = self._match_keywords(rule, task_words, task_lower, task_text)
+            matched_kws, kw_coverage = self._match_keywords(
+                rule=rule,
+                task_words=task_words,
+                task_lower=task_lower,
+                task_text=task_text,
+            )
 
             # Compute context similarity
             ctx_score = self._context_score(rule.trigger_context, task_lower, trigger_context)

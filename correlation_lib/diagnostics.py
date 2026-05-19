@@ -12,6 +12,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+try:
+    from importlib.metadata import version as _pkg_version
+    __version__ = _pkg_version("correlation-lib")
+except Exception:
+    __version__ = "0.2.0"
+
 from correlation_lib.rules import RuleSet
 from correlation_lib.tracker import EffectivenessTracker
 from correlation_lib.rule_provider import FileRuleProvider
@@ -78,7 +84,7 @@ def correlation_diagnostics(
         }
 
     return {
-        "version": "0.1.0",
+        "version": __version__,
         "environment": {
             "DIAGNOSTIC": os.environ.get("DIAGNOSTIC", "not set"),
             "PYTHON": sys.version,
