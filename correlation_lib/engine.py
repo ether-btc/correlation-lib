@@ -56,7 +56,7 @@ class CorrelationEngine:
         self._enricher: Enricher | None = None
         if self._rule_provider and self._recall_backend and self._context_backend:
             ruleset = self._rule_provider.get_rules()
-            self._enricher = Enricher(ruleset, self._recall_backend, self._context_backend, self._tracker)
+            self._enricher = Enricher(ruleset, self._recall_backend, self._context_backend, self._tracker, self._lifecycle_manager)
         else:
             logger.warning("Engine initialized without backends — enrichment disabled")
 

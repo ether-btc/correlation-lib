@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from correlation_lib.interfaces import EffectivenessStore
-from correlation_lib.rules import LifecycleState
+from correlation_lib.rules import LifecycleState, CorrelationRule, RuleSet
+from correlation_lib.lifecycle import LifecycleManager
 
 
 logger = logging.getLogger(__name__)
@@ -93,8 +94,8 @@ class SQLiteEffectivenessStore(EffectivenessStore):
         with sqlite3.connect(self._db_path) as conn:
             conn.execute(
                 f"""
-                INSERT INTO rule_effectiveness (rule_id, {col}, last_relevance_recorded, current_state)
-                VALUES (?, 1, ?, 'proposal')
+                INSERT INTO rule_effectiveness (rule_id, {col}, last_relevance_recorded)
+                VALUES (?, 1, ?)
                 ON CONFLICT(rule_id) DO UPDATE SET
                     {col} = {col} + 1,
                     last_relevance_recorded = excluded.last_relevance_recorded
@@ -175,6 +176,44 @@ class EffectivenessTracker:
         irel = stats.get("irrelevance_count", 0)
         total = rel + irel
         return rel / total if total > 0 else 0.0
+
+    def evaluate_lifecycles(self, ruleset: RuleSet, lifecycle_manager: LifecycleManager) -> None:
+        """Run lifecycle evaluation on all tracked rules.
+
+        Q1=A: fully automated — no human intervention required.
+        Called after rule firings are recorded.
+        """
+        all_stats = self._store.get_all_stats()
+        for rule in ruleset.get_active_rules():
+            if not lifecycle_manager.can_advance(rule):
+                continue
+            raw = all_stats.get(rule.id)
+            if not raw:
+                continue
+            rel = raw.get("relevance_count", 0)
+            irel = raw.get("irrelevance_count", 0)
+            total = rel + irel
+            eff_ratio = rel / total if total > 0 else 0.0
+            new_state = lifecycle_manager.evaluate(
+                rule,
+                firing_count=raw.get("firing_count", 0),
+                effectiveness_ratio=eff_ratio,
+            )
+            if new_state:
+                # Update rule in ruleset
+                for r in ruleset.rules:
+                    if r.id == rule.id:
+                        object.__setattr__(r, "lifecycle_state", new_state)
+                # Update store
+                self._store.update_state(rule.id, new_state)
+                # Log to lifecycle log
+                self._store.log_lifecycle(
+                    rule.id,
+                    rule.lifecycle_state,
+                    new_state,
+                    f"auto: firing_count={raw.get('firing_count', 0)}, eff_ratio={eff_ratio:.3f}",
+                    "auto",
+                )
 
     def get_stats(self, rule_id: str) -> RuleStats:
         """Get comprehensive stats for a rule."""

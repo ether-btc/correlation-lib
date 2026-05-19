@@ -15,8 +15,7 @@ from correlation_lib.matcher import Matcher, MatchResult
 from correlation_lib.rules import RuleSet, CorrelationRule
 from correlation_lib.tracker import EffectivenessTracker
 
-if TYPE_CHECKING:
-    from correlation_lib.lifecycle import LifecycleManager
+from correlation_lib.lifecycle import LifecycleManager
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +49,13 @@ class Enricher:
         recall_backend: RecallBackend,
         context_backend: ContextBackend,
         tracker: EffectivenessTracker,
+        lifecycle_manager: LifecycleManager,
     ) -> None:
         self._ruleset = ruleset
         self._recall = recall_backend
         self._context = context_backend
         self._tracker = tracker
+        self._lifecycle_manager = lifecycle_manager
         self._matcher = Matcher(ruleset)
 
     def on_task_start(
@@ -110,6 +111,9 @@ class Enricher:
                 "Rule %s fired for task (score=%.3f, matched_kws=%s)",
                 rule.id, result.combined_score, result.matched_keywords,
             )
+
+        # Evaluate lifecycle state for all rules after recording
+        self._tracker.evaluate_lifecycles(self._ruleset, self._lifecycle_manager)
 
         # Recall and inject for each fired rule
         for rule, result in fired:

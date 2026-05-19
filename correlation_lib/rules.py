@@ -193,7 +193,7 @@ def load_rules_from_json(data: list[dict[str, Any]]) -> RuleSet:
 
 def load_rules_from_file(path: str | Path) -> RuleSet:
     """Load rules from a JSON file."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, list):
         raise ValueError(f"Rule file must contain a JSON array, got {type(data).__name__}")

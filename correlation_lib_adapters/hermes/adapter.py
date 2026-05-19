@@ -82,7 +82,7 @@ class CorrelationMemoryProvider(MemoryProvider):
         db_path = Path(hermes_home) / "correlation-effectiveness.db"
 
         if config_path.exists():
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
             corr_cfg = (config.get("memory", {}).get("provider", {}).get("correlation") or {})
             rule_file_str = corr_cfg.get(CONFIG_RULE_FILE)

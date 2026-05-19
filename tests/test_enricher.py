@@ -8,6 +8,7 @@ from correlation_lib.rules import CorrelationRule, RuleSet, LifecycleState
 from correlation_lib.matcher import Matcher
 from correlation_lib.tracker import SQLiteEffectivenessStore, EffectivenessTracker
 from correlation_lib.enricher import Enricher, EnrichmentResult
+from correlation_lib.lifecycle import LifecycleManager
 
 
 class MockRecall:
@@ -73,7 +74,8 @@ class TestEnricherOnTaskStart:
             db_path = Path(tmpdir) / "test.db"
             store = SQLiteEffectivenessStore(db_path=db_path)
             tracker = EffectivenessTracker(store)
-            enricher = Enricher(ruleset, recall, context, tracker)
+            lifecycle_manager = LifecycleManager()
+            enricher = Enricher(ruleset, recall, context, tracker, lifecycle_manager)
             result = enricher.on_task_start("I need to modify the config setting")
 
             assert result.injected_count == 2
@@ -98,7 +100,8 @@ class TestEnricherOnTaskStart:
             db_path = Path(tmpdir) / "test.db"
             store = SQLiteEffectivenessStore(db_path=db_path)
             tracker = EffectivenessTracker(store)
-            enricher = Enricher(ruleset, recall, context, tracker)
+            lifecycle_manager = LifecycleManager()
+            enricher = Enricher(ruleset, recall, context, tracker, lifecycle_manager)
             result = enricher.on_task_start("debug the memory issue")
 
             assert result.injected_count == 0
@@ -125,7 +128,8 @@ class TestEnricherOnTaskStart:
             db_path = Path(tmpdir) / "test.db"
             store = SQLiteEffectivenessStore(db_path=db_path)
             tracker = EffectivenessTracker(store)
-            enricher = Enricher(ruleset, recall, context, tracker)
+            lifecycle_manager = LifecycleManager()
+            enricher = Enricher(ruleset, recall, context, tracker, lifecycle_manager)
             result = enricher.on_task_start("modify the config")
 
             assert result.injected_count == 0
@@ -163,7 +167,8 @@ class TestEnricherOnPrefetch:
             db_path = Path(tmpdir) / "test.db"
             store = SQLiteEffectivenessStore(db_path=db_path)
             tracker = EffectivenessTracker(store)
-            enricher = Enricher(ruleset, recall, context, tracker)
+            lifecycle_manager = LifecycleManager()
+            enricher = Enricher(ruleset, recall, context, tracker, lifecycle_manager)
             result = enricher.on_prefetch("test task")
 
             # Only high-confidence (>=0.9) should fire in prefetch
