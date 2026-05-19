@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -98,6 +98,10 @@ class CorrelationRule:
             )
         return warnings
 
+    def with_lifecycle(self, new_state: LifecycleState) -> CorrelationRule:
+        """Return a new CorrelationRule with updated lifecycle_state (frozen dataclass safe)."""
+        return replace(self, lifecycle_state=new_state)
+
 
 # JSON schema for reference (not enforced via jsonschema library to keep zero deps)
 RULE_SCHEMA = {
@@ -133,24 +137,20 @@ class RuleSet:
 
     def __post_init__(self) -> None:
         # Build keyword index for fast lookup
-        kw_index: dict[str, set[int]] = {}
+        self._rebuild_keyword_index()
+
+    def _rebuild_keyword_index(self) -> None:
+        """Rebuild the keyword-to-rule-index from current rules list."""
+        self._keyword_index = {}
         for i, rule in enumerate(self.rules):
             for kw in rule.trigger_keywords:
-                kw_index.setdefault(kw.lower(), set()).add(i)
-        object.__setattr__(self, "_keyword_index", kw_index)
+                self._keyword_index.setdefault(kw.lower(), set()).add(i)
 
     def add(self, rule: CorrelationRule) -> list[str]:
         """Add a rule, returning validation warnings."""
         warnings = rule.validate_keywords()
-        rules = self.rules.copy()
-        rules.append(rule)
-        object.__setattr__(self, "rules", rules)
-        # Rebuild index
-        kw_index: dict[str, set[int]] = {}
-        for i, r in enumerate(self.rules):
-            for kw in r.trigger_keywords:
-                kw_index.setdefault(kw.lower(), set()).add(i)
-        object.__setattr__(self, "_keyword_index", kw_index)
+        self.rules.append(rule)
+        self._rebuild_keyword_index()
         return warnings
 
     def get_by_id(self, rule_id: str) -> CorrelationRule | None:
@@ -166,6 +166,16 @@ class RuleSet:
     def get_active_rules(self) -> list[CorrelationRule]:
         """Return rules not in retired state."""
         return [r for r in self.rules if r.lifecycle_state != LifecycleState.RETIRED]
+
+    def with_lifecycle_update(self, rule_id: str, new_state: LifecycleState) -> list[CorrelationRule]:
+        """Return new rules list with specified rule's lifecycle_state updated via replace()."""
+        new_rules = []
+        for r in self.rules:
+            if r.id == rule_id:
+                new_rules.append(replace(r, lifecycle_state=new_state))
+            else:
+                new_rules.append(r)
+        return new_rules
 
 
 def load_rules_from_json(data: list[dict[str, Any]]) -> RuleSet:

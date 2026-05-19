@@ -87,7 +87,7 @@ class FileRuleProvider(RuleProvider):
         return self._rule_file
 
     def enable_watch(self) -> None:
-        object.__setattr__(self, "_watch_enabled", True)
+        self._watch_enabled = True
 
     def disable_watch(self) -> None:
-        object.__setattr__(self, "_watch_enabled", False)
+        self._watch_enabled = False

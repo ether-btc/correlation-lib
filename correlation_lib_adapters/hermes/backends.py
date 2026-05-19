@@ -46,7 +46,8 @@ class HermesRecallBackend(RecallBackend):
         self._mnemosyne = mnemosyne
 
     def set_mnemosyne(self, mnemosyne: Mnemosyne) -> None:
-        object.__setattr__(self, "_mnemosyne", mnemosyne)
+        """Set or replace the Mnemosyne instance after initialization."""
+        self._mnemosyne = mnemosyne
 
     def fetch(self, path: str) -> str | None:
         """Fetch context for a path by querying Mnemosyne memory.

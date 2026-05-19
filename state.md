@@ -328,7 +328,8 @@ Before building: **confirm the 4 open questions** (Q1-Q4 above) so Type 1 decisi
 | Hardcoded `0.1.0` version | diagnostics.py:81 | ✅ Fixed — now reads `__version__` via `importlib.metadata` |
 | Positional arg in keyword-only context | matcher.py:53 | ✅ Fixed — `_match_keywords(rule=rule, ...)` |
 | Circular import on diagnostics import | diagnostics.py:15 | ✅ Fixed — self-contained `__version__` via `importlib.metadata` |
-| `PY2_EXCEPT_NAME` false positives | enricher.py, rule_provider.py, adapter.py, backends.py | Python 3 `except E as N:` detected as Python 2 by AST analysis — not actual bugs |
+|| `BUG-3` object.__setattr__ on frozen/fake-mutable | engine.py:106, tracker.py:206, rules.py:140/147/153, rule_provider.py:90/93 | ✅ Fixed — `with_lifecycle_update()` uses `replace()`, `_watch_enabled` direct assign ||
+|| `PY2_EXCEPT_NAME` false positives | enricher.py, rule_provider.py, adapter.py, backends.py | Python 3 `except E as N:` detected as Python 2 by AST analysis — not actual bugs ||
 
 ## Demo Output (2026-05-19 — 4/4 Rules Firing)
 

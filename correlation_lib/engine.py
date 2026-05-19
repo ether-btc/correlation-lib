@@ -100,10 +100,9 @@ class CorrelationEngine:
                 effectiveness_ratio=stats.effectiveness_ratio,
             )
             if new_state:
-                # Update rule in ruleset
-                for r in ruleset.rules:
-                    if r.id == rule.id:
-                        object.__setattr__(r, "lifecycle_state", new_state)
+                # Update rule in ruleset using replace() for frozen dataclass safety
+                new_rules = ruleset.with_lifecycle_update(rule.id, new_state)
+                ruleset.rules = new_rules
                 # Update store
                 self._tracker._store.update_state(rule.id, new_state)  # type: ignore
                 # Log to lifecycle log
