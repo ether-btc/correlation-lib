@@ -11,9 +11,8 @@ import tempfile
 from pathlib import Path
 
 from correlation_lib import create_engine
-from correlation_lib.interfaces import RecallBackend, ContextBackend
+from correlation_lib.interfaces import ContextBackend, RecallBackend
 from correlation_lib.rules import CorrelationRule, RuleSet
-
 
 # --------------------------------------------------------------------------- #
 # Mock backends — simulate Hermes/Mnemosyne behavior
@@ -208,9 +207,9 @@ def test_multiple_rules_fire():
         confidence=0.85,
     ))
 
-    from correlation_lib.tracker import SQLiteEffectivenessStore, EffectivenessTracker
     from correlation_lib.enricher import Enricher
     from correlation_lib.lifecycle import LifecycleManager
+    from correlation_lib.tracker import EffectivenessTracker, SQLiteEffectivenessStore
 
     store = SQLiteEffectivenessStore()
     tracker = EffectivenessTracker(store)

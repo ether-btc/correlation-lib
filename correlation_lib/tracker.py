@@ -6,7 +6,6 @@ Q1=A confirmed: fully automated lifecycle advancement.
 
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 from dataclasses import dataclass
@@ -14,9 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from correlation_lib.interfaces import EffectivenessStore
-from correlation_lib.rules import LifecycleState, CorrelationRule, RuleSet
 from correlation_lib.lifecycle import LifecycleManager
-
+from correlation_lib.rules import LifecycleState, RuleSet
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +75,7 @@ class SQLiteEffectivenessStore(EffectivenessStore):
     def record_fire(self, rule_id: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
-            cur = conn.execute(
+            conn.execute(
                 """
                 INSERT INTO rule_effectiveness (rule_id, firing_count, last_fired)
                 VALUES (?, 1, ?)
