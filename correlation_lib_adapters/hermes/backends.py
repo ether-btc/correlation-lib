@@ -1,9 +1,10 @@
 """Hermes adapter — wires correlation-lib into Hermes Agent.
 
 Provides:
-- HermesRecallBackend: fetches context paths from Mnemosyne memory
+- HermesRecallBackend: fetches context paths from Mnemosyne beam recall
 - HermesContextBackend: injects correlated context into agent context
-- CorrelationMemoryProvider: MemoryProvider plugin for Hermes
+
+Used by CorrelatingMnemosyneProvider (composition_provider.py).
 """
 
 from __future__ import annotations
@@ -12,17 +13,18 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
-from correlation_lib.interfaces import RecallBackend, ContextBackend
+from correlation_lib.interfaces import ContextBackend, RecallBackend
 
 if TYPE_CHECKING:
-    from mnemosyne import Mnemosyne
-
+    from mnemosyne.core.beam import BeamMemory
 
 logger = logging.getLogger(__name__)
 
+# Limits for recall queries — control token budget per correlation path.
+_RECALL_TOP_K = 3
+_LOG_CONTENT_PREVIEW = 100
 
-# Context paths used in must_also_fetch are stored as memory search queries.
-# This pattern maps path-like strings to Mnemosyne recall queries.
+
 def _path_to_query(path: str) -> str:
     """Convert a context path to a Mnemosyne recall query.
 
@@ -36,48 +38,50 @@ def _path_to_query(path: str) -> str:
 
 
 class HermesRecallBackend(RecallBackend):
-    """Recall backend that fetches context paths via Mnemosyne search.
+    """Recall backend that fetches context paths via Mnemosyne beam recall.
 
     must_also_fetch entries are treated as search queries against Mnemosyne's
-    working memory and episodic memory.
+    working memory and episodic memory via beam.recall().
+
+    IMPORTANT: This backend only READS from Mnemosyne (via beam.recall).
+    It never writes via beam.remember — correlation is strictly READ-ONLY.
     """
 
-    def __init__(self, mnemosyne: Mnemosyne | None = None) -> None:
-        self._mnemosyne = mnemosyne
+    def __init__(self, beam: BeamMemory | None = None) -> None:
+        # Named _beam for consistency — this is a BeamMemory instance,
+        # not the MnemosyneMemoryProvider.
+        self._beam = beam
 
-    def set_mnemosyne(self, mnemosyne: Mnemosyne) -> None:
-        """Set or replace the Mnemosyne instance after initialization."""
-        self._mnemosyne = mnemosyne
+    def set_mnemosyne(self, beam: BeamMemory) -> None:
+        """Set or replace the BeamMemory instance after initialization."""
+        self._beam = beam
 
     def fetch(self, path: str) -> str | None:
-        """Fetch context for a path by querying Mnemosyne memory.
+        """Fetch context for a path by querying Mnemosyne beam recall.
 
         Returns the best recall result as a formatted string, or None.
         """
-        if self._mnemosyne is None:
-            logger.warning("HermesRecallBackend: no Mnemosyne instance — cannot fetch %r", path)
+        if self._beam is None:
+            logger.warning("HermesRecallBackend: no BeamMemory instance — cannot fetch %r", path)
             return None
 
         query = _path_to_query(path)
 
         try:
-            # Use recall to get relevant memories
-            results = self._mnemosyne.remember(query, limit=3)
+            # READ-ONLY: use beam.recall(), NOT beam.remember()
+            results = self._beam.recall(query, top_k=_RECALL_TOP_K)
             if not results:
-                # Try get_context for recent memories as fallback
-                ctx_results = self._mnemosyne.get_context(limit=5)
-                # Check if any context entries match the path
-                for entry in ctx_results:
-                    if path.lower() in entry.lower() or query.lower() in entry.lower():
-                        return entry
                 return None
 
-            # Format results as context
+            # Format results — beam.recall() returns List[Dict] with 'content' key
             formatted = []
             for i, result in enumerate(results, 1):
-                content = result.get("content", "")
-                if content:
-                    formatted.append(f"[{i}] {content}")
+                if isinstance(result, dict):
+                    content = result.get("content", "")
+                    if content:
+                        formatted.append(f"[{i}] {content}")
+                elif isinstance(result, str):
+                    formatted.append(f"[{i}] {result}")
 
             if formatted:
                 return "\n\n".join(formatted)
@@ -106,9 +110,10 @@ class HermesContextBackend(ContextBackend):
             "relationship": relationship,
         }
         self._injected.append(entry)
+        preview = content if len(content) <= _LOG_CONTENT_PREVIEW else content[:_LOG_CONTENT_PREVIEW] + "..."
         logger.debug(
             "Injected context from rule %s (relationship=%s): %s",
-            source_rule, relationship, content[:100] + "..." if len(content) > 100 else content,
+            source_rule, relationship, preview,
         )
 
     def get_injected(self) -> list[dict[str, Any]]:

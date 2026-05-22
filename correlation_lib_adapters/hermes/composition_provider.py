@@ -26,7 +26,6 @@ Config (under memory.correlation in config.yaml):
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -98,6 +97,21 @@ class CorrelatingMnemosyneProvider(MemoryProvider):
                 "(degrading to Mnemosyne-only): %s", exc,
             )
             self._correlation_ok = False
+
+    def _apply_enrichment_cap(self, raw: Any) -> None:
+        """Validate and apply enrichment_token_cap from config."""
+        try:
+            cap = int(raw)
+            if cap < 1:
+                logger.warning("enrichment_token_cap=%d is too low, clamping to 1", cap)
+                cap = 1
+            elif cap > 2000:
+                logger.warning("enrichment_token_cap=%d exceeds 2000, clamping", cap)
+                cap = 2000
+            self._enrichment_cap = cap
+        except (TypeError, ValueError):
+            logger.warning("Invalid enrichment_token_cap=%r, using default %d",
+                           raw, _DEFAULT_ENRICHMENT_TOKEN_CAP)
 
     def system_prompt_block(self) -> str:
         """Mnemosyne's system prompt block only.  Correlation adds nothing here."""
@@ -213,8 +227,10 @@ class CorrelatingMnemosyneProvider(MemoryProvider):
                 new_session_id, parent_session_id=parent_session_id,
                 reset=reset, **kwargs,
             )
-        except Exception:
-            pass  # Mnemosyne may not implement this
+        except AttributeError:
+            pass  # Mnemosyne may not implement this method
+        except Exception as exc:
+            logger.warning("on_session_switch error: %s", exc)
 
     def on_pre_compress(self, messages: List[Dict[str, Any]]) -> str:
         """Forward to Mnemosyne."""
@@ -325,13 +341,13 @@ class CorrelatingMnemosyneProvider(MemoryProvider):
             if corr_cfg.get("db_path"):
                 db_path = Path(corr_cfg["db_path"]).expanduser()
             if corr_cfg.get("enrichment_token_cap"):
-                self._enrichment_cap = int(corr_cfg["enrichment_token_cap"])
+                self._apply_enrichment_cap(corr_cfg["enrichment_token_cap"])
 
         # Import correlation-lib
         from correlation_lib import create_engine
         from correlation_lib_adapters.hermes.backends import (
-            HermesRecallBackend,
             HermesContextBackend,
+            HermesRecallBackend,
         )
 
         self._recall_backend = HermesRecallBackend()
@@ -360,6 +376,10 @@ class CorrelatingMnemosyneProvider(MemoryProvider):
 
         Non-fatal if beam is not yet available — prefetch will still work
         for base recall; correlation just won't resolve must_also_fetch paths.
+
+        Note: accesses MnemosyneMemoryProvider._beam private attribute.
+        This is a known coupling point — if Mnemosyne renames this attribute,
+        correlation will degrade gracefully with a logged warning.
         """
         if not self._recall_backend:
             return
@@ -369,7 +389,11 @@ class CorrelatingMnemosyneProvider(MemoryProvider):
                 self._recall_backend.set_mnemosyne(beam)
                 logger.info("CorrelatingMnemosyneProvider: wired Mnemosyne beam to recall backend")
             else:
-                logger.debug("CorrelatingMnemosyneProvider: Mnemosyne beam not available yet")
+                logger.warning(
+                    "CorrelatingMnemosyneProvider: Mnemosyne _beam is None — "
+                    "correlation must_also_fetch will not resolve. "
+                    "This is expected if Mnemosyne is still initializing."
+                )
         except Exception as exc:
             logger.warning("Failed to wire Mnemosyne beam: %s", exc)
 

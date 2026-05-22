@@ -1,0 +1,171 @@
+{
+  "critical": [
+    {
+      "file": "correlation_lib_adapters/hermes/backends.py",
+      "line": 65,
+      "severity": "CRITICAL",
+      "description": "HermesRecallBackend.fetch() calls self._mnemosyne.remember(query, limit=3) but remember() is a WRITE method (stores a new memory, returns str memory_id). The correct read method is recall() which takes top_k (not limit) and returns List[Dict]. This means every correlation fetch will silently WRITE a garbage memory entry and return a string memory_id (truthy), which then gets .get('content','') called on it at line 78, producing empty formatted list, falling through to get_context fallback.",
+      "fix_suggestion": "Change line 65 to: results = self._mnemosyne.recall(query, top_k=3)"
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/backends.py",
+      "line": 68,
+      "severity": "CRITICAL",
+      "description": "get_context() returns List[Dict] (each with keys: id, content, source, timestamp, importance, scope) but line 71 does entry.lower() on each entry, which will raise AttributeError: 'dict' object has no attribute 'lower'. This entire fallback path is broken.",
+      "fix_suggestion": "Change line 71 to check dict values: if path.lower() in entry.get('content', '').lower() or query.lower() in entry.get('content', '').lower(): return entry.get('content', '')"
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/backends.py",
+      "line": 78,
+      "severity": "CRITICAL",
+      "description": "After the remember->recall fix, results from recall() are List[Dict] so result.get('content', '') is correct. BUT if remember() is kept (bug #1), the return is a str memory_id, and str.get() will AttributeError. This is a secondary symptom of bug #1.",
+      "fix_suggestion": "Fix bug #1 (use recall not remember) and this resolves automatically."
+    }
+  ],
+  "warnings": [
+    {
+      "file": "correlation_lib_adapters/hermes/backends.py",
+      "line": 17,
+      "severity": "WARNING",
+      "description": "TYPE_CHECKING import of 'mnemosyne.Mnemosyne' is used only for type hints. But the actual object passed to set_mnemosyne() in composition_provider.py:369 is self._mnemosyne._beam (a BeamMemory instance), not a Mnemosyne instance. The TYPE_CHECKING guard means no runtime import error, but the type annotation is misleading. The real contract is: set_mnemosyne receives BeamMemory, and fetch() calls BeamMemory.recall()/get_context().",
+      "fix_suggestion": "Update the TYPE_CHECKING import and type annotations to reflect that either BeamMemory or any duck-type-compatible object is accepted, or tighten the composition_provider to pass the full MnemosyneMemoryProvider instead of reaching into _beam."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 367,
+      "severity": "WARNING",
+      "description": "_wire_mnemosyne_to_recall() accesses self._mnemosyne._beam via getattr — this reaches into the private _beam attribute of MnemosyneMemoryProvider. If Mnemosyne refactors this internal attribute, this will silently break. The beam could also be None at this point (documented as non-fatal, but the log message at line 370 says 'wired' even though beam might be in an incomplete state).",
+      "fix_suggestion": "Add a public method to MnemosyneMemoryProvider (e.g., get_beam()) to expose the beam without breaking encapsulation, or pass the full provider to set_mnemosyne and let the backend extract what it needs."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/adapter.py",
+      "line": 24,
+      "severity": "WARNING",
+      "description": "Top-level imports from correlation_lib (create_engine, Enricher, EffectivenessTracker, RuleSet) will fail at import time if correlation_lib is not installed. The file docstring says 'Usage in config.yaml: memory.provider: correlation' but the __init__.py re-exports CorrelationMemoryProvider, meaning any import of the hermes adapter package will trigger these imports even if the provider isn't used.",
+      "fix_suggestion": "Move these imports inside the methods that use them (lazy imports), matching the pattern used in composition_provider.py, or guard with try/except ImportError."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/adapter.py",
+      "line": 106,
+      "severity": "WARNING",
+      "description": "initialize() checks kwargs for 'mnemosyne' key but this is not a standard kwarg documented in MemoryProvider ABC (which lists hermes_home, platform, agent_context, etc.). The MnemosyneMemoryProvider is never passed in kwargs by the standard MemoryManager lifecycle. This code path appears unreachable in normal operation.",
+      "fix_suggestion": "Document that this provider requires manual wiring of Mnemosyne, or implement a discovery mechanism to find the active Mnemosyne provider from the MemoryManager."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 192,
+      "severity": "WARNING",
+      "description": "on_turn_start() lazily imports correlation_lib.Enricher inside the method body (line 187). This is inside a try/except so failures are caught, but the import happens on EVERY turn. Python caches module imports, so the overhead is a dict lookup, but the pattern is inconsistent with other correlation_lib imports that happen at the top of methods in _init_correlation.",
+      "fix_suggestion": "Move 'from correlation_lib import Enricher' to the top of on_turn_start() or cache it as self._Enricher in _init_correlation."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/adapter.py",
+      "line": 173,
+      "severity": "WARNING",
+      "description": "on_turn_start() checks os.environ.get('DIAGNOSTIC') == '1' on every turn AND does a lazy import of correlation_lib.diagnostics. If the DIAGNOSTIC env var is set but self._engine is None (init failed), line 175 self._engine.rule_provider will raise AttributeError on NoneType. The check at line 150 guards the main logic but the diagnostic block at 173-177 is outside that guard.",
+      "fix_suggestion": "Add 'if self._engine is None: return' before the DIAGNOSTIC block, or move the diagnostic check inside the existing self._engine guard."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 298,
+      "severity": "WARNING",
+      "description": "_ensure_mnemosyne() uses importlib.util to load the Mnemosyne plugin from a hardcoded path. The module is loaded as 'mnemosyne_plugin' — if _ensure_mnemosyne() is called twice in a race (unlikely in sync code but possible if ever used async), two different module objects could be created. More importantly, the module name 'mnemosyne_plugin' could collide if any other code uses the same module name in sys.modules.",
+      "fix_suggestion": "Use a unique module name (e.g., 'hermes_plugins.mnemosyne') or check sys.modules before loading."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 217,
+      "severity": "WARNING",
+      "description": "on_session_switch() silently swallows ALL exceptions with 'pass'. If Mnemosyne's on_session_switch raises a critical error (e.g., DB corruption), the composition provider hides it completely. The comment says 'Mnemosyne may not implement this' but AttributeError for a missing method would be the expected exception, not a blanket catch.",
+      "fix_suggestion": "Catch (AttributeError, NotImplementedError) specifically, or at minimum log at DEBUG level instead of silently passing."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 231,
+      "severity": "WARNING",
+      "description": "on_memory_write() silently swallows all exceptions. Same pattern as on_session_switch. Memory write failures should at minimum be logged.",
+      "fix_suggestion": "Add logger.debug() or logger.warning() in the except block."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 238,
+      "severity": "WARNING",
+      "description": "on_delegation() silently swallows all exceptions. Same silent-failure pattern.",
+      "fix_suggestion": "Add logger.debug() in the except block."
+    }
+  ],
+  "suggestions": [
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 319,
+      "severity": "SUGGESTION",
+      "description": "yaml is imported inside _init_correlation() and the config file is opened but never explicitly closed if yaml.safe_load raises. The 'with open()' context manager handles this, so no leak, but the pattern of importing yaml inside a method could be moved to the top of the method for clarity.",
+      "fix_suggestion": "Move 'import yaml' to the top of the file (it's a stdlib dependency and always available)."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/adapter.py",
+      "line": 53,
+      "severity": "SUGGESTION",
+      "description": "'name = \"correlation\"' is a class attribute, not a @property. The MemoryProvider ABC defines 'name' as an @property. While this works (Python class attributes are readable as instance attributes), it violates the ABC contract pattern. If MemoryProvider ever adds a setter or uses super().name, this will break.",
+      "fix_suggestion": "Convert to @property: @property / def name(self) -> str: return 'correlation'"
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/adapter.py",
+      "line": 27,
+      "severity": "SUGGESTION",
+      "description": "EffectivenessTracker and RuleSet are imported at the top level but never used in adapter.py. Dead imports increase load time and create unnecessary dependency coupling.",
+      "fix_suggestion": "Remove unused imports: EffectivenessTracker and RuleSet."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 18,
+      "severity": "SUGGESTION",
+      "description": "import os at line 29 is unused in composition_provider.py. No reference to os anywhere in the file.",
+      "fix_suggestion": "Remove 'import os' from line 29."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 395,
+      "severity": "SUGGESTION",
+      "description": "_forward() returns Any because getattr with method_name could return None (if the method doesn't exist) and the caller might not check. The 'return None' at line 401 means callers like system_prompt_block() could return None instead of str, violating the MemoryProvider contract that returns str.",
+      "fix_suggestion": "Change line 401 to 'return \"\"' instead of 'return None' to match the str return type contract."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 328,
+      "severity": "SUGGESTION",
+      "description": "enrichment_token_cap is read from config and cast to int without validation. A value of 0 or negative would disable enrichment silently. A non-numeric value would raise ValueError caught by the outer try/except but with a confusing error message.",
+      "fix_suggestion": "Add validation: self._enrichment_cap = max(1, int(corr_cfg['enrichment_token_cap']))"
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/backends.py",
+      "line": 99,
+      "severity": "SUGGESTION",
+      "description": "HermesContextBackend._injected is a plain list with no size bound. If correlation rules inject many entries in a single turn, the list grows unbounded. While clear() is called at turn boundaries, a single turn with many rule matches could produce excessive context.",
+      "fix_suggestion": "Add a max_injections cap (e.g., 20) in inject() and log a warning when exceeded."
+    },
+    {
+      "file": ".hermes/plugins/enriched-mnemosyne/__init__.py",
+      "line": 23,
+      "severity": "SUGGESTION",
+      "description": "sys.path manipulation with [Path(p) for p in sys.path] creates a list of Path objects on every call. The comparison `correlation_lib_path not in [Path(p) for p in sys.path]` is O(n) and creates n Path objects. This runs once at plugin registration but is wasteful.",
+      "fix_suggestion": "Use str comparison: if str(correlation_lib_path) not in sys.path: sys.path.insert(0, str(correlation_lib_path))"
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 37,
+      "severity": "SUGGESTION",
+      "description": "_CHARS_PER_TOKEN = 4 is a rough approximation. For code-heavy context (common in Hermes), the actual ratio is closer to 3-3.5 chars/token. For markdown with headers, it could be 5+. This means the 500-token cap could be off by 20-40%.",
+      "fix_suggestion": "Consider making this configurable or using a slightly more conservative value like 3.5."
+    },
+    {
+      "file": "correlation_lib_adapters/hermes/composition_provider.py",
+      "line": 42,
+      "severity": "SUGGESTION",
+      "description": "_truncate_to_tokens() may split in the middle of a word boundary. While rsplit('\\n', 1) tries to break at a newline, if there are no newlines in the truncated range, it still cuts at an arbitrary character position.",
+      "fix_suggestion": "Consider using text[:max_chars].rsplit(' ', 1)[0] as a fallback to avoid mid-word breaks."
+    }
+  ],
+  "passed": false,
+  "summary": "AUDIT FAILED — 3 CRITICAL bugs found. The HermesRecallBackend.fetch() in backends.py calls remember() (a write method) instead of recall() (the read method), silently writing garbage memories on every correlation fetch. The fallback path using get_context() treats returned Dict entries as strings, causing AttributeError crashes. These two bugs mean the correlation recall pipeline is completely non-functional: it either writes instead of reads, or crashes. 10 warnings (mostly silent exception swallowing, type annotation mismatches, and unreachable code paths) and 10 suggestions (code quality improvements) also identified."
+}

@@ -1,4 +1,10 @@
-"""CorrelationMemoryProvider — wires correlation-lib into Hermes Agent memory system.
+"""CorrelationMemoryProvider — DEPRECATED: use composition_provider.py instead.
+
+This standalone provider is superseded by CorrelatingMnemosyneProvider which
+composes Mnemosyne + correlation-lib in a single MemoryProvider registration.
+Kept for backward compatibility only.
+
+See: correlation_lib_adapters.hermes.composition_provider
 
 Q2=B: on_task_start fires correlation on new task detection (Enricher.is_new_task).
 Q2 fallback: prefetch fires only high-confidence (>=0.9) correlations.
@@ -22,13 +28,13 @@ from typing import Any
 from agent.memory_provider import MemoryProvider
 
 from correlation_lib import (
-    create_engine,
     Enricher,
-    EffectivenessTracker,
-    RuleSet,
+    create_engine,
 )
-from correlation_lib_adapters.hermes.backends import HermesRecallBackend, HermesContextBackend
-
+from correlation_lib_adapters.hermes.backends import (
+    HermesContextBackend,
+    HermesRecallBackend,
+)
 
 logger = logging.getLogger(__name__)
 
