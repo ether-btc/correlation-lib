@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,14 @@ from correlation_lib import (
 from correlation_lib_adapters.hermes.backends import (
     HermesContextBackend,
     HermesRecallBackend,
+)
+
+warnings.warn(
+    "CorrelationMemoryProvider is deprecated. "
+    "Use CorrelatingMnemosyneProvider from "
+    "correlation_lib_adapters.hermes.composition_provider instead.",
+    DeprecationWarning,
+    stacklevel=2,
 )
 
 logger = logging.getLogger(__name__)

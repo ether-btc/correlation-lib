@@ -166,6 +166,7 @@ class CorrelatingMnemosyneProvider(MemoryProvider):
             try:
                 if self._context_backend:
                     self._context_backend.clear()
+                self._recall_backend = None
                 self._engine = None
                 self._correlation_ok = False
             except Exception as exc:
@@ -416,11 +417,16 @@ class CorrelatingMnemosyneProvider(MemoryProvider):
             logger.error("Correlation prefetch failed: %s", exc)
             return ""
 
+    # Methods expected to return lists — used as fallbacks in _forward
+    _LIST_RETURNING_METHODS = frozenset({"get_tool_schemas"})
+
     def _forward(self, method_name: str, *args, **kwargs) -> Any:
         """Forward a method call to the wrapped Mnemosyne provider."""
         if self._mnemosyne is None:
             self._ensure_mnemosyne()
         method = getattr(self._mnemosyne, method_name, None)
         if method is None:
+            if method_name in self._LIST_RETURNING_METHODS:
+                return []
             return None
         return method(*args, **kwargs)

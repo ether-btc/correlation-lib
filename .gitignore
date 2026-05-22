@@ -53,4 +53,4 @@ Thumbs.db
 *.db           # sqlite test dbs
 *.tmp          # temp files
 .hermes/       # local hermes home (may contain secrets)
-state.md       # personal working notes
+state.md       # personal working notesaudit-*-report.json
