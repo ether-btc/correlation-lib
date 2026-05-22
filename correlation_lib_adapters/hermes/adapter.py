@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from hermes_agent.agent.memory_provider import MemoryProvider
+from agent.memory_provider import MemoryProvider
 
 from correlation_lib import (
     create_engine,
@@ -70,7 +70,7 @@ class CorrelationMemoryProvider(MemoryProvider):
 
         Reads config from memory.provider.correlation in ~/.hermes/config.yaml.
         """
-        from hermes_agent.hermes_constants import get_hermes_home
+        from hermes_constants import get_hermes_home
 
         hermes_home = kwargs.get("hermes_home") or str(get_hermes_home())
 
@@ -188,6 +188,10 @@ class CorrelationMemoryProvider(MemoryProvider):
         """Clean shutdown."""
         self._context.clear()
         self._engine = None
+
+    def get_tool_schemas(self) -> list[dict[str, Any]]:
+        """CorrelationMemoryProvider is context-only — no tools exposed."""
+        return []
 
     def get_config_schema(self) -> list[dict[str, Any]]:
         return [
