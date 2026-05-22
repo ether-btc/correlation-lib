@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,22 @@ from correlation_lib.rules import LifecycleState, RuleSet
 logger = logging.getLogger(__name__)
 
 DB_PATH = Path.home() / ".hermes" / "correlation-effectiveness.db"
+
+# Production-grade SQLite pragmas for WAL mode, concurrency, and reliability.
+_PRAGMAS = [
+    "PRAGMA journal_mode = WAL",
+    "PRAGMA synchronous = NORMAL",
+    "PRAGMA busy_timeout = 5000",
+    "PRAGMA foreign_keys = ON",
+    "PRAGMA cache_size = -64000",
+    "PRAGMA temp_store = MEMORY",
+]
+
+
+def _configure_connection(conn: sqlite3.Connection) -> None:
+    """Apply production pragmas to a new connection."""
+    for pragma in _PRAGMAS:
+        conn.execute(pragma)
 
 
 @dataclass
@@ -36,15 +53,38 @@ class RuleStats:
 
 
 class SQLiteEffectivenessStore(EffectivenessStore):
-    """SQLite-backed effectiveness store (Q4=A)."""
+    """SQLite-backed effectiveness store (Q4=A).
+
+    Thread-safe via a single shared connection with a lock.
+    Uses WAL mode for better concurrency under concurrent reads/writes.
+    """
 
     def __init__(self, db_path: Path | str | None = None) -> None:
         self._db_path = Path(db_path) if db_path else DB_PATH
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+        self._conn: sqlite3.Connection | None = None
         self._init_db()
 
+    def _get_conn(self) -> sqlite3.Connection:
+        """Return the shared, pragma-configured connection (thread-safe).
+
+        Must hold self._lock before calling.
+        """
+        if self._conn is None:
+            self._conn = sqlite3.connect(
+                self._db_path,
+                timeout=30.0,
+                check_same_thread=False,
+                isolation_level="DEFERRED",
+            )
+            self._conn.row_factory = sqlite3.Row
+            _configure_connection(self._conn)
+        return self._conn
+
     def _init_db(self) -> None:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._lock:
+            conn = self._get_conn()
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS rule_effectiveness (
                     rule_id TEXT PRIMARY KEY,
@@ -71,10 +111,12 @@ class SQLiteEffectivenessStore(EffectivenessStore):
                 CREATE INDEX IF NOT EXISTS idx_lifecycle_rule
                 ON lifecycle_log(rule_id, timestamp)
             """)
+            conn.commit()
 
     def record_fire(self, rule_id: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        with sqlite3.connect(self._db_path) as conn:
+        with self._lock:
+            conn = self._get_conn()
             conn.execute(
                 """
                 INSERT INTO rule_effectiveness (rule_id, firing_count, last_fired)
@@ -85,11 +127,13 @@ class SQLiteEffectivenessStore(EffectivenessStore):
                 """,
                 (rule_id, now),
             )
+            conn.commit()
 
     def record_relevance(self, rule_id: str, is_relevant: bool) -> None:
         now = datetime.now(timezone.utc).isoformat()
         col = "relevance_count" if is_relevant else "irrelevance_count"
-        with sqlite3.connect(self._db_path) as conn:
+        with self._lock:
+            conn = self._get_conn()
             conn.execute(
                 f"""
                 INSERT INTO rule_effectiveness (rule_id, {col}, last_relevance_recorded)
@@ -100,32 +144,36 @@ class SQLiteEffectivenessStore(EffectivenessStore):
                 """,
                 (rule_id, now),
             )
+            conn.commit()
 
     def get_stats(self, rule_id: str) -> dict:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._lock:
+            conn = self._get_conn()
             row = conn.execute(
-                "SELECT * FROM rule_effectiveness WHERE rule_id = ?", (rule_id,)
+                "SELECT * FROM rule_effectiveness WHERE rule_id = ?", (rule_id,),
             ).fetchone()
-            if not row:
-                return {}
-            cols = ["rule_id", "firing_count", "relevance_count", "irrelevance_count",
-                    "last_fired", "last_relevance_recorded", "current_state"]
-            return dict(zip(cols, row))
-        return {}
+        if not row:
+            return {}
+        cols = ["rule_id", "firing_count", "relevance_count", "irrelevance_count",
+                "last_fired", "last_relevance_recorded", "current_state"]
+        return dict(zip(cols, row))
 
     def get_all_stats(self) -> dict[str, dict]:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._lock:
+            conn = self._get_conn()
             rows = conn.execute("SELECT * FROM rule_effectiveness").fetchall()
-            cols = ["rule_id", "firing_count", "relevance_count", "irrelevance_count",
-                    "last_fired", "last_relevance_recorded", "current_state"]
-            return {row[0]: dict(zip(cols, row)) for row in rows}
+        cols = ["rule_id", "firing_count", "relevance_count", "irrelevance_count",
+                "last_fired", "last_relevance_recorded", "current_state"]
+        return {row[0]: dict(zip(cols, row)) for row in rows}
 
     def update_state(self, rule_id: str, state: LifecycleState) -> None:
-        with sqlite3.connect(self._db_path) as conn:
+        with self._lock:
+            conn = self._get_conn()
             conn.execute(
                 "UPDATE rule_effectiveness SET current_state = ? WHERE rule_id = ?",
                 (state.value, rule_id),
             )
+            conn.commit()
 
     def log_lifecycle(
         self,
@@ -136,7 +184,8 @@ class SQLiteEffectivenessStore(EffectivenessStore):
         triggered_by: str,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        with sqlite3.connect(self._db_path) as conn:
+        with self._lock:
+            conn = self._get_conn()
             conn.execute(
                 """
                 INSERT INTO lifecycle_log (rule_id, from_state, to_state, reason, triggered_by, timestamp)
@@ -144,6 +193,7 @@ class SQLiteEffectivenessStore(EffectivenessStore):
                 """,
                 (rule_id, from_state.value, to_state.value, reason, triggered_by, now),
             )
+            conn.commit()
 
 
 class EffectivenessTracker:

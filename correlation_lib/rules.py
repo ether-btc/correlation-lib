@@ -132,7 +132,7 @@ class RuleSet:
     """A collection of correlation rules with validation."""
 
     rules: list[CorrelationRule] = field(default_factory=list)
-    _keyword_index: dict[str, set[int]] = field(default_factory=list, repr=False)
+    _keyword_index: dict[str, set[int]] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         # Build keyword index for fast lookup
