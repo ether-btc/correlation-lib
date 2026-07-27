@@ -34,7 +34,15 @@ hermes = [
 packages = ["correlation_lib", "correlation_lib_adapters", "correlation_lib_adapters.hermes"]
 
 [tool.hatch.build.targets.sdist]
-include = ["correlation_lib", "correlation_lib_adapters"]
+include = [
+    "correlation_lib",
+    "correlation_lib_adapters",
+    "examples",
+    "CHANGELOG.md",
+    "README.md",
+    "pyproject.toml",
+    ".gitignore",
+]
 
 [tool.ruff]
 target-version = "py310"
