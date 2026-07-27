@@ -1,0 +1,74 @@
+[
+  {
+    "id": "prod-001-config-change",
+    "trigger_context": "config-change",
+    "trigger_keywords": ["config", "setting", "modify", "reconfigure", "config.yaml", "config.yml", ".env"],
+    "must_also_fetch": ["backup-location", "rollback-instructions", "config-audit-log"],
+    "relationship_type": "constrains",
+    "confidence": 0.92,
+    "lifecycle": { "state": "testing" }
+  },
+  {
+    "id": "prod-002-error-debugging",
+    "trigger_context": "error-debugging",
+    "trigger_keywords": ["error", "crash", "fail", "exception", "traceback", "stacktrace", "panic"],
+    "must_also_fetch": ["recent-incidents", "error-patterns", "service-status"],
+    "relationship_type": "diagnosed_by",
+    "confidence": 0.88,
+    "lifecycle": { "state": "testing" }
+  },
+  {
+    "id": "prod-003-database-ops",
+    "trigger_context": "database-ops",
+    "trigger_keywords": ["migrate", "migration", "schema", "drop table", "alter table", "rollback"],
+    "must_also_fetch": ["backup-verification", "rollback-runbook", "db-connection-pool-status"],
+    "relationship_type": "constrains",
+    "confidence": 0.95,
+    "lifecycle": { "state": "testing" }
+  },
+  {
+    "id": "prod-004-memory-optimization",
+    "trigger_context": "memory-optimization",
+    "trigger_keywords": ["memory", "ram", "usage", "leak", "oom", "oom-killer", "swap", "gc"],
+    "must_also_fetch": ["memory-history", "gc-logs", "process-rss-snapshot"],
+    "relationship_type": "related_to",
+    "confidence": 0.84,
+    "lifecycle": { "state": "testing" }
+  },
+  {
+    "id": "prod-005-deployment",
+    "trigger_context": "deployment",
+    "trigger_keywords": ["deploy", "release", "rollout", "ship", "publish", "promote"],
+    "must_also_fetch": ["rollback-runbook", "deployment-history", "health-check-endpoints"],
+    "relationship_type": "constrains",
+    "confidence": 0.90,
+    "lifecycle": { "state": "testing" }
+  },
+  {
+    "id": "prod-006-security-incident",
+    "trigger_context": "security-incident",
+    "trigger_keywords": ["breach", "vulnerability", "cve", "exploit", "leaked", "unauthorized", "injection"],
+    "must_also_fetch": ["threat-model", "incident-response-playbook", "credential-rotation-procedure"],
+    "relationship_type": "constrains",
+    "confidence": 0.96,
+    "lifecycle": { "state": "testing" }
+  },
+  {
+    "id": "prod-007-dependency-update",
+    "trigger_context": "dependency-update",
+    "trigger_keywords": ["upgrade", "update dep", "bump version", "pin version", "lockfile", "requirements.txt", "pyproject.toml"],
+    "must_also_fetch": ["dependency-audit", "compatibility-matrix", "ci-baseline-status"],
+    "relationship_type": "supports",
+    "confidence": 0.82,
+    "lifecycle": { "state": "testing" }
+  },
+  {
+    "id": "prod-008-data-deletion",
+    "trigger_context": "data-deletion",
+    "trigger_keywords": ["delete", "drop", "purge", "remove all", "wipe", "truncate", "rm -rf"],
+    "must_also_fetch": ["backup-verification", "data-retention-policy", "soft-delete-vs-hard-delete"],
+    "relationship_type": "constrains",
+    "confidence": 0.94,
+    "lifecycle": { "state": "testing" }
+  }
+]
