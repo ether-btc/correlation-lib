@@ -19,7 +19,13 @@ from correlation_lib.rules import LifecycleState, RuleSet
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path.home() / ".hermes" / "correlation-effectiveness.db"
+def _default_db_path() -> Path:
+    """Return the current user's default effectiveness DB path.
+
+    Resolve this at store construction time rather than import time so tests
+    and disposable environments can safely sandbox HOME before instantiation.
+    """
+    return Path.home() / ".hermes" / "correlation-effectiveness.db"
 
 # Production-grade SQLite pragmas for WAL mode, concurrency, and reliability.
 _PRAGMAS = [
@@ -60,7 +66,7 @@ class SQLiteEffectivenessStore(EffectivenessStore):
     """
 
     def __init__(self, db_path: Path | str | None = None) -> None:
-        self._db_path = Path(db_path) if db_path else DB_PATH
+        self._db_path = Path(db_path) if db_path else _default_db_path()
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._conn: sqlite3.Connection | None = None

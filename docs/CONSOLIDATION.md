@@ -45,3 +45,20 @@ After this branch is reviewed and merged, GitHub cleanup should be performed sep
 - keep `openclaw-correlation-plugin` active as the OpenClaw reference unless its owner-facing purpose changes.
 
 No GitHub repository has been archived, deleted, or redirected by this change.
+
+## Reviewed research disposition
+
+Independent `zai/glm-5.3` research and adversarial review completed 2026-08-29. RepoHunt discovery and source inspection identified `semantica-agi/semantica` as a useful architectural reference for provenance and decision traces, but not a dependency: its current Python metadata declares a heavyweight ML/graph stack including Torch, Transformers, spaCy, SciPy, scikit-learn, sentence-transformers, and graph/vector tooling. The disposition is **REFERENCE_ONLY**; no Semantica code is imported or vendored.
+
+The reviews also identified that the earlier verification suite wrote to the default live effectiveness DB. This was independently reproduced: the un-sandboxed E2E tests created engines without `db_path`, and the direct multi-rule test created `SQLiteEffectivenessStore()` without a path. The current suite now has a repository-wide temporary `HOME`/`HERMES_HOME` fixture and dynamic default-path resolution in `tracker.py`.
+
+Verification after isolation repair:
+
+- `python3 -m pytest tests/ -q` — 68 passed, 1 warning, 0 failed;
+- normal-process `strace` — 0 opens of `/home/hermes-pi/.hermes/correlation-effectiveness.db`;
+- live DB lifecycle row count — 102 before and after the traced run;
+- `python3 -m ruff check correlation_lib correlation_lib_adapters tests` — passed;
+- `git diff --check` — passed;
+- `uv build --wheel --out-dir /tmp/correlation-lib-build` — built `correlation_lib-0.4.0-py3-none-any.whl`.
+
+The existing live DB is retained untouched and labeled contaminated historical evidence; cleanup requires a separate approved operation.
