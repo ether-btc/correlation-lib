@@ -7,12 +7,16 @@ Exercises the full chain:
 Run: python tests/test_e2e.py
 """
 
+import os
+import sys
 import tempfile
 from pathlib import Path
 
-from correlation_lib import create_engine
-from correlation_lib.interfaces import ContextBackend, RecallBackend
-from correlation_lib.rules import CorrelationRule, RuleSet
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from correlation_lib import create_engine  # noqa: E402
+from correlation_lib.interfaces import ContextBackend, RecallBackend  # noqa: E402
+from correlation_lib.rules import CorrelationRule, RuleSet  # noqa: E402
 
 # --------------------------------------------------------------------------- #
 # Mock backends — simulate Hermes/Mnemosyne behavior
@@ -227,31 +231,35 @@ def test_multiple_rules_fire():
 if __name__ == "__main__":
     import sys
 
-    tests = [
-        test_config_change_rule,
-        test_error_debugging_rule,
-        test_database_migration_rule,
-        test_memory_optimization_rule,
-        test_no_match_no_injection,
-        test_effectiveness_tracking,
-        test_multiple_rules_fire,
-    ]
+    with tempfile.TemporaryDirectory() as sandbox_home:
+        os.environ["HOME"] = sandbox_home
+        os.environ["USERPROFILE"] = sandbox_home
+        os.environ["HERMES_HOME"] = sandbox_home
 
-    failed = 0
-    for test in tests:
-        try:
-            print(f"RUNNING {test.__name__}...", end=" ", flush=True)
-            test()
-            print("PASS")
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            print(f"FAIL: {e}")
-            failed += 1
+        tests = [
+            test_config_change_rule,
+            test_error_debugging_rule,
+            test_database_migration_rule,
+            test_memory_optimization_rule,
+            test_no_match_no_injection,
+            test_effectiveness_tracking,
+            test_multiple_rules_fire,
+        ]
 
-    print()
-    if failed:
-        print(f"{failed}/{len(tests)} tests FAILED")
-        sys.exit(1)
-    else:
+        failed = 0
+        for test in tests:
+            try:
+                print(f"RUNNING {test.__name__}...", end=" ", flush=True)
+                test()
+                print("PASS")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"FAIL: {e}")
+                failed += 1
+
+        print()
+        if failed:
+            print(f"{failed}/{len(tests)} tests FAILED")
+            sys.exit(1)
         print(f"All {len(tests)} tests PASSED")
