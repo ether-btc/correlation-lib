@@ -7,6 +7,7 @@ Target: <100 LoC.
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 
 from correlation_lib.enricher import Enricher
@@ -45,6 +46,7 @@ class CorrelationEngine:
         store: EffectivenessStore = SQLiteEffectivenessStore(db_path=db_path)
         self._tracker = EffectivenessTracker(store)
         self._lifecycle_manager = LifecycleManager()
+        self._lifecycle_lock = threading.RLock()
 
         # Backends (require concrete implementations)
         self._recall_backend = recall_backend
@@ -98,19 +100,22 @@ class CorrelationEngine:
                 effectiveness_ratio=stats.effectiveness_ratio,
             )
             if new_state:
-                # Update rule in ruleset using replace() for frozen dataclass safety
-                new_rules = ruleset.with_lifecycle_update(rule.id, new_state)
-                ruleset.rules = new_rules
-                # Update store
-                self._tracker._store.update_state(rule.id, new_state)  # type: ignore
-                # Log to lifecycle log
-                self._tracker._store.log_lifecycle(  # type: ignore
-                    rule.id,
-                    rule.lifecycle_state,
-                    new_state,
-                    f"auto: firing_count={stats.firing_count}, eff_ratio={stats.effectiveness_ratio:.3f}",
-                    "auto",
-                )
+                with self._lifecycle_lock:
+                    from_state = rule.lifecycle_state
+                    # Update rule in ruleset using replace() for frozen dataclass safety
+                    new_rules = ruleset.with_lifecycle_update(rule.id, new_state)
+                    ruleset.rules = new_rules
+                    # Update store
+                    self._tracker._store.update_state(rule.id, new_state)  # type: ignore
+                    # Log to lifecycle log
+                    self._tracker._store.log_lifecycle(  # type: ignore
+                        rule.id,
+                        from_state,
+                        new_state,
+                        self._lifecycle_manager.last_reason_for(rule.id)
+                        or f"auto: firing_count={stats.firing_count}, eff_ratio={stats.effectiveness_ratio:.3f}",
+                        "auto",
+                    )
 
 
 def create_engine(

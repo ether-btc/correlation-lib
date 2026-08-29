@@ -15,10 +15,12 @@ Status: prepared on `chore/consolidate-python-repos`; runtime activation is inte
 
 The consolidation retains:
 
-- cycle 1 and cycle 2 audit probes;
-- Phase B and Phase C audit probes;
-- Hermes adapter integration fixtures/tests;
-- the provider failure and lifecycle regression coverage represented by those tests.
+- cycle 1 and cycle 2 audit probes as historical source material;
+- Phase B and Phase C audit findings as historical source material;
+- Hermes adapter integration behavior through new canonical regression coverage;
+- operator-visible legacy adapter initialization health (`is_healthy`, `last_init_error`);
+- rule-ID validation and required-field validation;
+- lifecycle hard-demotion support, transition reasons, and atomic lifecycle persistence updates.
 
 The old repository's `README.md`, `state.md`, and `CONTINUE_HERE.md` remain historical records in that repository and are not treated as current runtime instructions.
 
