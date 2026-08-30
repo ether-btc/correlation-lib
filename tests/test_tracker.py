@@ -14,6 +14,16 @@ from correlation_lib.tracker import (
 
 
 class TestSQLiteEffectivenessStore:
+    def test_default_db_path_follows_sandboxed_home(self, monkeypatch, tmp_path) -> None:
+        live_db_path = Path.home() / ".hermes" / "correlation-effectiveness.db"
+        sandbox_home = tmp_path / "home"
+        monkeypatch.setenv("HOME", str(sandbox_home))
+
+        store = SQLiteEffectivenessStore()
+
+        assert store._db_path == sandbox_home / ".hermes" / "correlation-effectiveness.db"
+        assert store._db_path != live_db_path
+
     def test_record_fire(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
@@ -23,7 +24,7 @@ class LifecycleState(Enum):
         allowed = {
             LifecycleState.PROPOSAL: {LifecycleState.TESTING},
             LifecycleState.TESTING: {LifecycleState.VALIDATED, LifecycleState.PROPOSAL},
-            LifecycleState.VALIDATED: {LifecycleState.PROMOTED, LifecycleState.TESTING},
+            LifecycleState.VALIDATED: {LifecycleState.PROMOTED, LifecycleState.TESTING, LifecycleState.PROPOSAL},
             LifecycleState.PROMOTED: {LifecycleState.RETIRED, LifecycleState.VALIDATED, LifecycleState.PROPOSAL},
             LifecycleState.RETIRED: set(),
         }
@@ -54,6 +55,8 @@ CONFIDENCE_CALIBRATION = {
     (0.85, 0.90): "Reliable patterns — backup ops, error debugging",
     (0.70, 0.80): "Useful but some false-positive risk — session recovery, git ops",
 }
+
+RULE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
 @dataclass(frozen=True)
@@ -181,6 +184,21 @@ def load_rules_from_json(data: list[dict[str, Any]]) -> RuleSet:
     """Load rules from JSON-serializable list of dicts."""
     rules: list[CorrelationRule] = []
     for item in data:
+        rule_id = item.get("id")
+        if not isinstance(rule_id, str) or not RULE_ID_PATTERN.fullmatch(rule_id):
+            raise ValueError(
+                f"Invalid rule id {rule_id!r}; must match {RULE_ID_PATTERN.pattern}"
+            )
+        required_fields = (
+            "trigger_context",
+            "trigger_keywords",
+            "must_also_fetch",
+            "relationship_type",
+            "confidence",
+        )
+        missing = [name for name in required_fields if name not in item]
+        if missing:
+            raise ValueError(f"Rule {rule_id!r} missing required fields: {missing}")
         state_str = (item.get("lifecycle") or {}).get("state", "proposal")
         match_mode_str = item.get("match_mode", "auto")
         rules.append(

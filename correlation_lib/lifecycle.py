@@ -44,6 +44,11 @@ class LifecycleManager:
 
     def __init__(self) -> None:
         self._transitions: list[LifecycleTransition] = []
+        self._last_reasons: dict[str, str] = {}
+
+    def last_reason_for(self, rule_id: str) -> str | None:
+        """Return the most recent transition reason for a rule."""
+        return self._last_reasons.get(rule_id)
 
     @property
     def history(self) -> list[LifecycleTransition]:
@@ -118,6 +123,7 @@ class LifecycleManager:
                 triggered_by=triggered_by,
             )
             self._transitions.append(transition)
+            self._last_reasons[rule.id] = reason
             logger.info(
                 "Rule %s lifecycle transition: %s -> %s (%s)",
                 rule.id, current.value, new_state.value, reason,

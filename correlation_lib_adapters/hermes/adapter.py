@@ -69,11 +69,22 @@ class CorrelationMemoryProvider(MemoryProvider):
 
     def __init__(self) -> None:
         self._engine = None
+        self._last_init_error: str | None = None
         self._recall = HermesRecallBackend()
         self._context = HermesContextBackend()
         self._turn_count = 0
 
     # -- MemoryProvider implementation -----------------------------------------
+
+    @property
+    def is_healthy(self) -> bool:
+        """Whether the correlation engine initialized successfully."""
+        return self._engine is not None
+
+    @property
+    def last_init_error(self) -> str | None:
+        """Return the most recent initialization error, if any."""
+        return self._last_init_error
 
     def is_available(self) -> bool:
         """Check if correlation rules are configured."""
@@ -120,12 +131,14 @@ class CorrelationMemoryProvider(MemoryProvider):
             # Wire Mnemosyne if available
             if "mnemosyne" in kwargs:
                 self._recall.set_mnemosyne(kwargs["mnemosyne"])
+            self._last_init_error = None
             logger.info(
                 "CorrelationMemoryProvider initialized: rule_file=%s watch=%s db=%s",
                 rule_file, watch_enabled, db_path,
             )
         except Exception as exc:
             logger.error("Failed to initialize correlation engine: %s", exc)
+            self._last_init_error = repr(exc)
             self._engine = None
 
     def system_prompt_block(self) -> str:
@@ -203,6 +216,7 @@ class CorrelationMemoryProvider(MemoryProvider):
         """Clean shutdown."""
         self._context.clear()
         self._engine = None
+        self._last_init_error = None
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
         """CorrelationMemoryProvider is context-only — no tools exposed."""
