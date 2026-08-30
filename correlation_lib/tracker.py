@@ -137,7 +137,10 @@ class SQLiteEffectivenessStore(EffectivenessStore):
 
     def record_relevance(self, rule_id: str, is_relevant: bool) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        col = "relevance_count" if is_relevant else "irrelevance_count"
+        # Both column names are module-controlled literals drawn from a fixed
+        # tuple — never user input — so the f-string interpolation is safe.
+        relevance_cols = ("relevance_count", "irrelevance_count")
+        col = relevance_cols[0 if is_relevant else 1]
         with self._lock:
             conn = self._get_conn()
             conn.execute(
