@@ -1,5 +1,7 @@
 """Tests for correlation_lib.matcher."""
 
+import re
+
 import pytest
 
 from correlation_lib.matcher import (
@@ -33,6 +35,53 @@ def make_ruleset(rules: list[CorrelationRule]) -> RuleSet:
     for r in rules:
         rs.add(r)
     return rs
+
+
+class ReferenceMatcher(Matcher):
+    """Literal pre-optimization keyword matcher used as a differential oracle."""
+
+    def _match_keywords(
+        self,
+        rule: CorrelationRule,
+        task_words: set[str],
+        task_lower: str,
+        task_text: str,
+    ) -> tuple[list[str], float]:
+        matched: list[str] = []
+
+        if rule.match_mode == MatchMode.STRICT:
+            for kw in rule.trigger_keywords:
+                pattern = r"\b" + re.escape(kw.lower()) + r"\b"
+                if re.search(pattern, task_lower):
+                    matched.append(kw)
+        elif rule.match_mode == MatchMode.LENIENT:
+            for kw in rule.trigger_keywords:
+                if kw.lower() in task_lower:
+                    matched.append(kw)
+        else:
+            for kw in rule.trigger_keywords:
+                pattern = r"\b" + re.escape(kw.lower()) + r"\b"
+                if re.search(pattern, task_lower):
+                    matched.append(kw)
+                elif kw.lower() in task_lower:
+                    matched.append(kw)
+
+        coverage = len(matched) / len(rule.trigger_keywords) if rule.trigger_keywords else 0.0
+        return matched, coverage
+
+
+def result_signature(results: list[object]) -> list[tuple[object, ...]]:
+    return [
+        (
+            result.rule,
+            result.matched_keywords,
+            result.keyword_coverage,
+            result.context_score,
+            result.combined_score,
+            result.is_match,
+        )
+        for result in results
+    ]
 
 
 class TestMatcher:
@@ -126,6 +175,99 @@ class TestMatcher:
         results = matcher.match("test task")
         # RETIRED rules should not appear in results at all
         assert not any(r.rule.id == "cr-001" and r.is_match for r in results)
+
+
+class TestMatcherOptimizationOracle:
+    @pytest.mark.parametrize("mode", list(MatchMode))
+    @pytest.mark.parametrize(
+        "task_text",
+        [
+            "CONFIG config reconfigure C++ a.b \\\\ path",
+            "İ i\u0307 ı ß STRASSE 中文 中文词 😀 e\u0301 é",
+            "punctuation: (alpha), snake_case and emoji😀tail",
+            "",
+        ],
+    )
+    def test_exact_differential_edge_matrix(self, mode: MatchMode, task_text: str) -> None:
+        rules = [
+            make_rule(
+                "edge-a",
+                "config-change",
+                ["Config", "config", "C++", "a.b", "\\", "", "Config"],
+                0.91,
+                mode,
+            ),
+            make_rule(
+                "edge-b",
+                "unicode-context",
+                ["İ", "i\u0307", "ß", "STRASSE", "中文", "中文词", "😀", "e\u0301", "é"],
+                0.83,
+                mode,
+            ),
+            make_rule("edge-empty", "", [], 0.77, mode),
+            make_rule("tie-a", "stable-tie", ["same"], 0.8, mode),
+            make_rule("tie-b", "stable-tie", ["same"], 0.8, mode),
+        ]
+        ruleset = make_ruleset(rules)
+
+        expected = ReferenceMatcher(ruleset).match(task_text)
+        actual_matcher = Matcher(ruleset)
+        assert result_signature(actual_matcher.match(task_text)) == result_signature(expected)
+        assert result_signature(actual_matcher.match(task_text)) == result_signature(expected)
+
+    def test_live_ruleset_add_replace_retire_and_context_hint(self) -> None:
+        original = make_rule("live", "first-context", ["First"], 0.9)
+        ruleset = make_ruleset([original])
+        actual = Matcher(ruleset)
+        reference = ReferenceMatcher(ruleset)
+
+        for text, hint in [("First", None), ("First", "first-context")]:
+            assert result_signature(actual.match(text, hint)) == result_signature(reference.match(text, hint))
+
+        added = make_rule("added", "second-context", ["Second", "Second"], 0.85)
+        ruleset.add(added)
+        assert result_signature(actual.match("First Second")) == result_signature(
+            reference.match("First Second")
+        )
+
+        ruleset.rules = ruleset.with_lifecycle_update("live", LifecycleState.RETIRED)
+        assert result_signature(actual.match("First Second")) == result_signature(
+            reference.match("First Second")
+        )
+
+        replacement = make_rule("added", "second-context", ["Replacement"], 0.85)
+        ruleset.rules[1] = replacement
+        assert result_signature(actual.match("Second Replacement")) == result_signature(
+            reference.match("Second Replacement")
+        )
+
+    def test_exception_behavior_is_preserved_and_context_filter_stays_lazy(self) -> None:
+        bad_rule = make_rule("bad", "bad-context", ["valid", "placeholder"], 0.9)
+        ruleset = make_ruleset([bad_rule])
+        object.__setattr__(bad_rule, "trigger_keywords", (None, "placeholder"))
+
+        assert Matcher(ruleset).match("anything", "other-context") == []
+        with pytest.raises(AttributeError) as expected:
+            ReferenceMatcher(ruleset).match("anything")
+        with pytest.raises(type(expected.value), match="has no attribute 'lower'"):
+            Matcher(ruleset).match("anything")
+
+    def test_get_fired_rules_construction_path_matches_reference(self) -> None:
+        ruleset = make_ruleset([
+            make_rule("fire-a", "deploy-context", ["Deploy", "deploy"], 0.95),
+            make_rule("fire-b", "other-context", ["production"], 0.7, MatchMode.STRICT),
+        ])
+        expected_results = ReferenceMatcher(ruleset).match("Deploy to production")
+        expected = [
+            (result.rule, result)
+            for result in expected_results
+            if result.is_match and result.combined_score >= 0.5
+        ]
+
+        actual = get_fired_rules("Deploy to production", ruleset)
+        assert [(rule, result_signature([result])) for rule, result in actual] == [
+            (rule, result_signature([result])) for rule, result in expected
+        ]
 
 
 class TestFilterHighConfidence:

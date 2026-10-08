@@ -26,11 +26,21 @@ class MatchResult:
         return self.combined_score >= 0.48 and len(self.matched_keywords) > 0
 
 
+@dataclass(frozen=True)
+class _RuleMatcherData:
+    """Immutable matching data cached for one rule object."""
+
+    rule: CorrelationRule
+    lowered_keywords: tuple[str, ...]
+    boundary_patterns: tuple[re.Pattern[str], ...] | None
+
+
 class Matcher:
     """Matches task text against correlation rules."""
 
     def __init__(self, ruleset: RuleSet) -> None:
         self._ruleset = ruleset
+        self._rule_matcher_data: dict[int, _RuleMatcherData] = {}
 
     def match(self, task_text: str, trigger_context: str | None = None) -> list[MatchResult]:
         """Match task text against active rules.
@@ -89,28 +99,51 @@ class Matcher:
         """Match keywords against task. Returns (matched_keywords, coverage)."""
         matched: list[str] = []
 
-        if rule.match_mode == MatchMode.STRICT:
-            # Word-boundary matching
-            for kw in rule.trigger_keywords:
-                pattern = r'\b' + re.escape(kw.lower()) + r'\b'
-                if re.search(pattern, task_lower):
-                    matched.append(kw)
-        elif rule.match_mode == MatchMode.LENIENT:
+        if rule.match_mode == MatchMode.LENIENT:
             # Substring matching
             for kw in rule.trigger_keywords:
                 if kw.lower() in task_lower:
                     matched.append(kw)
+        elif rule.match_mode == MatchMode.STRICT:
+            # Word-boundary matching
+            matcher_data = self._get_rule_matcher_data(rule)
+            assert matcher_data.boundary_patterns is not None
+            for kw, pattern in zip(rule.trigger_keywords, matcher_data.boundary_patterns):
+                if pattern.search(task_lower):
+                    matched.append(kw)
         else:
             # AUTO: word-boundary first, substring fallback
-            for kw in rule.trigger_keywords:
-                pattern = r'\b' + re.escape(kw.lower()) + r'\b'
-                if re.search(pattern, task_lower):
+            matcher_data = self._get_rule_matcher_data(rule)
+            assert matcher_data.boundary_patterns is not None
+            for kw, lowered_kw, pattern in zip(
+                rule.trigger_keywords,
+                matcher_data.lowered_keywords,
+                matcher_data.boundary_patterns,
+            ):
+                if pattern.search(task_lower):
                     matched.append(kw)
-                elif kw.lower() in task_lower:
+                elif lowered_kw in task_lower:
                     matched.append(kw)
 
         coverage = len(matched) / len(rule.trigger_keywords) if rule.trigger_keywords else 0.0
         return matched, coverage
+
+    def _get_rule_matcher_data(self, rule: CorrelationRule) -> _RuleMatcherData:
+        """Return lazily cached matching data for this exact rule object."""
+        cache_key = id(rule)
+        cached = self._rule_matcher_data.get(cache_key)
+        if cached is not None and cached.rule is rule:
+            return cached
+
+        lowered_keywords = tuple(kw.lower() for kw in rule.trigger_keywords)
+        boundary_patterns = None
+        if rule.match_mode != MatchMode.LENIENT:
+            boundary_patterns = tuple(
+                re.compile(r'\b' + re.escape(kw) + r'\b') for kw in lowered_keywords
+            )
+        matcher_data = _RuleMatcherData(rule, lowered_keywords, boundary_patterns)
+        self._rule_matcher_data[cache_key] = matcher_data
+        return matcher_data
 
     def _context_score(
         self,
